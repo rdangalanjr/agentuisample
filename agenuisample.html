@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Agent Call Control UI</title>
+<style>
+  body { font-family: Arial, sans-serif; background: #f7f9fb; margin: 0; padding: 20px; }
+  h2 { margin-top: 0; color: #333; }
+  .container { display: flex; gap: 20px; max-width: 1200px; margin: auto; }
+  .panel { flex: 1; background: white; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); padding: 20px; }
+  label { display: block; margin-top: 10px; font-weight: bold; }
+  input, select, button { width: 100%; padding: 8px; margin-top: 5px; border-radius: 6px; border: 1px solid #ccc; }
+  button { background: #007bff; color: white; border: none; font-weight: bold; cursor: pointer; transition: background .15s ease; }
+  button:hover { background: #0056b3; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .pill { border-radius: 999px; }
+  .active-ready { background: #22c55e !important; }
+  .active-notready { background: #ef4444 !important; }
+  .active-hold { background: #facc15 !important; color: black !important; }
+  .active-resume { background: #22c55e !important; }
+  #status { margin: 20px auto 0; max-width: 1200px; white-space: pre-wrap; background: #fff; padding: 12px; border-radius: 6px; border: 1px solid #ccc; max-height: 240px; overflow-y: auto; font-size: 14px; }
+   /* Match button width */
+  .full-width {
+    width: 95%;
+    padding: 8px 12px;
+    font-size: 14px;
+
+    margin-top: 5px;
+  }
+ 
+.input-inline {
+  flex: 1;             /* input expands to take available space */
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+.btn-inline {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #007bff;
+  color: white;
+  cursor: pointer;
+}
+
+.btn-inline:hover {
+  background: #0056b3;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 20px; /* spacing between stacked panels */
+}
+
+.half-height {
+  height: 50%; /* make Session Tools panel smaller */
+  overflow-y: auto; /* scroll if content overflows */
+}
+
+
+</style>
+</head>
+<body>
+
+<h2>Agent Call Control UI</h2>
+<div class="container">
+
+  <!-- Session & Availability -->
+<!-- First Panel: OAuth + Session Login & Availability -->
+  <div class="col">
+<div class="panel">
+  <h3>Convoso OAuth Demo</h3>
+  <label>Client ID</label>
+   <input type="text" id="clientId" placeholder="Enter Client ID" class="full-width" />
+
+	<button id="loginBtn">Login with Convoso</button>
+  <hr>
+  <h4>Authorization Code</h4>
+  <pre id="authCode">-</pre>
+
+  <h3>Session Login & Availability</h3>
+  <label>API Base URL</label>
+  <input type="text" id="baseUrl" value="https://api.convoso.com/api/v1" />
+
+  <div class="row">
+    <div>
+      <label>Access Token</label>
+      <input type="text" id="accessToken" placeholder="Paste token here" />
+    </div>
+    <div>
+      <label>Session ID</label>
+      <input type="text" id="sessionId" placeholder="Enter session ID" />
+    </div>
+  </div>
+
+  <div class="row">
+    <input type="text" id="userId" placeholder="Enter User ID" class="input-inline" />
+    <button onclick="createChannel()" class="btn-inline">Create Channel</button>
+  </div>
+  
+    <button style="margin-top:10px;" onclick="openPhoneUrl()">Create Session</button>
+	<div class="row">
+    <div>
+      <label>Campaign ID</label>
+      <input type="text" id="campaign" value="1vvoyeamhydq42vr4eykv8yl659tj4pb" />
+    </div>
+    <div>
+      <label>Login Type</label>
+      <input type="text" id="loginType" value="campaign" />
+    </div>
+  </div>
+      <div class="full-width">
+        <select id="notReadyCode" onchange="goNotReady(this.value)">
+          <option value="">-- Select Availability Code --</option>
+        </select>
+      </div>
+    </div>
+	
+
+
+<!-- Second Panel: Session Tools -->
+<div class="panel half-height">
+      <h3>Session Tools</h3>
+      <button style="margin-top:10px;" onclick="getSessionDetails()">Get Session Details</button>
+      <button style="margin-top:10px;" onclick="getActiveCalls()">Get Active Calls</button>
+	  <button style="margin-top:10px;background:#ef4444;" onclick="deleteSession()">Delete Session</button>
+
+
+      <label style="margin-top:15px;">Channel ID</label>
+      <input type="text" id="channelId" placeholder="Enter Channel ID" class="full-width" />
+
+      <div class="row" style="margin-top:10px;">
+        <input type="text" id="pollFrom" placeholder="from (optional)" class="input-inline" />
+        <input type="text" id="pollTimeout" placeholder="timeout (ms, optional)" class="input-inline" />
+        <button onclick="longPoll()" class="btn-inline">Long Poll</button>
+      </div>
+    </div>
+  </div>
+
+
+
+  <!-- Call Controls -->
+<div class="panel">
+  <h3>Call Actions</h3>
+  <label>Call ID</label>
+  <input type="text" id="callId" placeholder="Live call ID" />
+
+  <button onclick="disconnectCall()">Disconnect Call</button>
+
+  <div class="btn-row" style="margin-top:10px;">
+    <button style="background:#22c55e;" onclick="acceptCall()">Accept Call</button>
+    <button style="background:#ef4444;" onclick="rejectCall()">Reject Call</button>
+  </div>
+
+  <label>Disposition</label>
+  <select id="dispositionSelect" class="full-width">
+  <option value="">-- Select Disposition --</option>
+  </select>
+  <label>Wrap-up Availability</label>
+	<select id="wrapAvailability" class="full-width">
+  <option value="">-- Select Availability --</option>
+	</select>
+
+  <button onclick="wrapUpCall()">Wrap-up Call</button>
+
+  <h4 style="margin-top:18px;">Mute / Unmute</h4>
+  <div class="btn-row">
+    <button onclick="muteCall()">Mute</button>
+    <button onclick="unmuteCall()">Unmute</button>
+  </div>
+
+  <h4 style="margin-top:18px;">Hold / Resume</h4>
+  <div class="btn-row">
+    <button id="btnHold" onclick="holdCall()">Hold Call</button>
+    <button id="btnResume" onclick="resumeCall()">Resume Call</button>
+  </div>
+  
+  <h4 style="margin-top:18px;">Manual Call</h4>
+<label>Lead ID</label>
+<input type="text" id="leadId" placeholder="Enter Lead ID" />
+
+<label>Phone Number</label>
+<input type="text" id="phoneNumber" placeholder="Enter Phone Number" />
+
+<button style="margin-top:10px;" onclick="makeCall()">Make Call</button>
+
+<h4 style="margin-top:18px;">Call Recording</h4>
+<div class="btn-row">
+  <button onclick="startRecord()">Start Recording</button>
+  <button style="background:#ef4444;" onclick="stopRecord()">Stop Recording</button>
+</div>
+</div>
+
+  <!-- Transfer -->
+  <div class="panel">
+    <h3>Transfer Call</h3>
+
+    <label>Destination Category</label>
+    <select id="destinationCategory" onchange="getDestinations()">
+      <option value="agents">Agents</option>
+	  <option value="queues">Queues</option>
+      <option value="Announcements">Announcements</option>
+      <option value="Voicemail">Voicemail</option>
+      <option value="predefined_numbers">Predefined Numbers</option>
+      <option value="Conference">Conference</option>
+      <option value="IVR">IVR</option>
+      <option value="Extensions">Extensions</option>
+      <option value="External_Numbers">External_Numbers</option>
+      <option value="Ring_Groups">Ring Groups</option>
+      <option value="Directory">Directory</option>
+    </select>
+
+    <label>Destination Name</label>
+    <select id="destinationName"></select>
+
+    <label>Destination Value</label>
+    <select id="destinationValue"></select>
+
+    <label>Transfer Type</label>
+    <select id="transferType">
+      <option value="call">3-Way Call</option>
+      <option value="call_and_hold">Call & Hold</option>
+      <option value="blind_transfer">Blind Transfer</option>
+    </select>
+
+    <button onclick="transferCall()">Transfer</button>
+	<button style="margin-top:10px;background:#ef4444;" onclick="leaveConference()">Leave Conference</button>
+  </div>
+
+</div>
+
+<div id="status">ℹ️ Status messages will appear here...</div>
+
+<script>
+function setStatus(msg) {
+  document.getElementById("status").textContent = msg;
+}
+
+function authHeaders() {
+  const token = document.getElementById("accessToken").value;
+  return { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
+}
+
+function baseUrl() { return document.getElementById("baseUrl").value; }
+function sessionId() { return document.getElementById("sessionId").value; }
+
+function requireSessionId() {
+  if (!sessionId()) {
+    setStatus("❌ No Session ID. Please enter a sessionId first.");
+    return false;
+  }
+  return true;
+}
+
+/** AVAILABILITY CHANGE */
+async function setAvailability(code) {
+  if (!requireSessionId()) return;
+  const url = `${baseUrl()}/agent/sessions/${sessionId()}`;
+
+  const body = {
+    campaign: document.getElementById("campaign").value,
+    availability: code,
+    type: document.getElementById("loginType").value
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+
+    setStatus(
+      res.ok
+        ? `✅ Availability changed:\n${JSON.stringify(data, null, 2)}`
+        : `❌ Error:\n${JSON.stringify(data, null, 2)}`
+    );
+  } catch (err) {
+    setStatus(`❌ Error setting availability: ${err.message}`);
+  }
+}
+
+
+/** Get Session Details */
+async function getSessionDetails() {
+  if (!requireSessionId()) return;
+  const url = `${baseUrl()}/agent/sessions/${sessionId()}`;
+  try {
+    const res = await fetch(url, { method: "GET", headers: authHeaders() });
+    const data = await res.json();
+    setStatus(res.ok ? `✅ Session Details:\n${JSON.stringify(data, null, 2)}` : `❌ Error:\n${JSON.stringify(data, null, 2)}`);
+  } catch (err) {
+    setStatus(`❌ Error fetching session details: ${err.message}`);
+  }
+}
+
+/** Get Destinations */
+async function getDestinations() {
+  if (!requireSessionId()) return;
+  const category = document.getElementById("destinationCategory").value;
+  const url = `${baseUrl()}/agent/sessions/${sessionId()}/destinations?category=${category}`;
+
+  try {
+    const res = await fetch(url, { method: "GET", headers: authHeaders() });
+    const data = await res.json();
+    if (res.ok) {
+      populateDestinations(data);
+      setStatus(`✅ Destinations loaded for category "${category}"`);
+    } else {
+      setStatus(`❌ Error loading destinations:\n${JSON.stringify(data, null, 2)}`);
+    }
+  } catch (err) {
+    setStatus(`❌ Error loading destinations: ${err.message}`);
+  }
+}
+
+function populateDestinations(data) {
+  const nameSelect = document.getElementById("destinationName");
+  const valueSelect = document.getElementById("destinationValue");
+  nameSelect.innerHTML = "";
+  valueSelect.innerHTML = "";
+
+  if (Array.isArray(data)) {
+    data.forEach(dest => {
+      let nameOption = document.createElement("option");
+      nameOption.value = dest.name || "";
+      nameOption.textContent = dest.name || "";
+      nameSelect.appendChild(nameOption);
+
+      let valueOption = document.createElement("option");
+      valueOption.value = dest.value || "";
+      valueOption.textContent = dest.value || "";
+      valueSelect.appendChild(valueOption);
+    });
+  }
+}
+
+/** Helper: call actions */
+function postAction(payload) {
+  if (!requireSessionId()) return Promise.resolve({ ok: false, data: { message: "Missing sessionId" } });
+  const url = `${baseUrl()}/agent/sessions/${sessionId()}/actions`;
+  return fetch(url, { method: "POST", headers: authHeaders(), body: JSON.stringify(payload) })
+    .then(async res => ({ ok: res.ok, data: await res.json() }))
+    .catch(err => ({ ok: false, data: { message: err.message } }));
+}
+
+/** Disconnect */
+function disconnectCall() {
+  postAction({ action: "DisconnectCall", call_id: document.getElementById("callId").value })
+    .then(r => setStatus(r.ok ? `✅ Disconnected:\n${JSON.stringify(r.data, null, 2)}` : `❌ Error:\n${JSON.stringify(r.data, null, 2)}`));
+}
+
+/** Wrap-up */
+async function wrapUpCall() {
+  if (!requireSessionId()) return;
+  const callId = document.getElementById("callId").value;
+  const disposition = document.getElementById("dispositionSelect").value;
+  const availability = document.getElementById("wrapAvailability").value; 
+
+  if (!callId) {
+    alert("⚠️ No call_id found. Please get active calls first.");
+    return;
+  }
+ 
+  const url = `${baseUrl()}/agent/sessions/${sessionId()}/actions`;
+  const body = {
+    action: "WrapupCall",
+    call_id: callId,
+    disposition: disposition,
+    availability: availability   
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    setStatus(
+      res.ok
+        ? `✅ Call wrapped up:\n${JSON.stringify(data, null, 2)}`
+        : `❌ Error wrapping up:\n${JSON.stringify(data, null, 2)}`
+    );
+  } catch (err) {
+    setStatus(`❌ Error wrapping up: ${err.message}`);
+  }
+}
+
+
+/** Transfer */
+function transferCall() {
+  postAction({
+    action: "TransferCall",
+    call_id: document.getElementById("callId").value,
+    transfer_type: document.getElementById("transferType").value,
+    destination_type: document.getElementById("destinationCategory").value,
+    destination_data: {
+      name: document.getElementById("destinationName").value,
+      value: document.getElementById("destinationValue").value
+    }
+  }).then(r => setStatus(r.ok ? `✅ Transfer Success:\n${JSON.stringify(r.data, null, 2)}` : `❌ Error:\n${JSON.stringify(r.data, null, 2)}`));
+}
+
+/** Mute / Unmute */
+function muteCall() {
+  postAction({ action: "MuteCall", call_id: document.getElementById("callId").value })
+    .then(r => setStatus(r.ok ? `✅ Muted:\n${JSON.stringify(r.data, null, 2)}` : `❌ Error:\n${JSON.stringify(r.data, null, 2)}`));
+}
+function unmuteCall() {
+  postAction({ action: "UnmuteCall", call_id: document.getElementById("callId").value })
+    .then(r => setStatus(r.ok ? `✅ Unmuted:\n${JSON.stringify(r.data, null, 2)}` : `❌ Error:\n${JSON.stringify(r.data, null, 2)}`));
+}
+
+/** Hold / Resume */
+function holdCall() {
+  postAction({ action: "HoldCall", call_id: document.getElementById("callId").value })
+    .then(r => {
+      if (r.ok) {
+        document.getElementById("btnHold").classList.add("active-hold");
+        document.getElementById("btnResume").classList.remove("active-resume");
+      }
+      setStatus(r.ok ? `✅ Call Held:\n${JSON.stringify(r.data, null, 2)}` : `❌ Error:\n${JSON.stringify(r.data, null, 2)}`);
+    });
+}
+function resumeCall() {
+  postAction({ action: "ResumeCall", call_id: document.getElementById("callId").value })
+    .then(r => {
+      if (r.ok) {
+        document.getElementById("btnResume").classList.add("active-resume");
+        document.getElementById("btnHold").classList.remove("active-hold");
+      }
+      setStatus(r.ok ? `✅ Call Resumed:\n${JSON.stringify(r.data, null, 2)}` : `❌ Error:\n${JSON.stringify(r.data, null, 2)}`);
+    });
+}
+
+/** Leave Conference */
+function leaveConference() {
+  postAction({
+    action: "LeaveConferenceCall",
+    call_id: document.getElementById("callId").value
+  }).then(r => setStatus(r.ok ? `✅ Left Conference:\n${JSON.stringify(r.data, null, 2)}` : `❌ Error:\n${JSON.stringify(r.data, null, 2)}`));
+}
+
+/** Populate Not Ready Codes */
+function populateNotReadyCodes(codes) {
+  const select = document.getElementById("notReadyCode");
+  select.innerHTML = '<option value="">-- Select Not Ready Code --</option>';
+
+  if (Array.isArray(codes) && codes.length > 0) {
+    codes.forEach(c => {
+      const option = document.createElement("option");
+      option.value = c.value;          // use "value" from API
+      option.textContent = c.name;     // show "name"
+
+      // disable if flagged
+      if (c.disabled || c.selectable === false) {
+        option.disabled = false;
+      }
+
+      select.appendChild(option);
+    });
+  }
+}
+
+/** Populate Wrap-up Availability */
+function populateWrapupAvailability(codes) {
+  const select = document.getElementById("wrapAvailability");
+  select.innerHTML = '<option value="">-- Select Wrap-up Availability --</option>';
+
+  if (Array.isArray(codes) && codes.length > 0) {
+    codes.forEach(c => {
+      const option = document.createElement("option");
+      option.value = c.value;        // API expects "value"
+      option.textContent = c.name;   // show "name"
+
+      if (c.disabled || c.selectable === false) {
+        option.disabled = false;
+      }
+
+      select.appendChild(option);
+    });
+  }
+}
+
+
+/** Trigger Not Ready change */
+function goNotReady(code) {
+  if (code) {
+    setAvailability(code);
+  }
+}
+
+/** Modified Open Phone URL to extract notready_codes and wrapup availability */
+async function openPhoneUrl() {
+  const url = `${baseUrl()}/agent/sessions`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: authHeaders()
+    });
+    const data = await res.json();
+
+    console.log("🔍 Full session response:", data);
+
+    if (res.ok) {
+      // Store session_id
+      if (data.session_id) {
+        document.getElementById("sessionId").value = data.session_id;
+      }
+
+      // ✅ Extract from availabilities.notready_codes
+      if (data.availabilities && data.availabilities.notready_codes) {
+        populateNotReadyCodes(data.availabilities.notready_codes);
+        populateWrapupAvailability(data.availabilities.notready_codes);
+      } else {
+        console.warn("⚠️ notready_codes not found in availabilities");
+      }
+
+      // Open phone_url if available
+      if (data.phone_url) {
+        window.open(data.phone_url, "_blank");
+        setStatus(`✅ Session created. Opened phone_url: ${data.phone_url}`);
+      } else {
+        setStatus(`✅ Session created but no phone_url found:\n${JSON.stringify(data, null, 2)}`);
+      }
+    } else {
+      setStatus(`❌ Session creation failed:\n${JSON.stringify(data, null, 2)}`);
+    }
+  } catch (err) {
+    setStatus(`❌ Error creating session: ${err.message}`);
+  }
+}
+
+
+
+/** Get Active Calls */
+async function getActiveCalls() {
+  if (!requireSessionId()) return;
+  const url = `${baseUrl()}/agent/sessions/${sessionId()}/calls`;
+  try {
+    const res = await fetch(url, { headers: authHeaders() });
+    const data = await res.json();
+
+    console.log("🔍 Active calls response:", data);
+
+    if (res.ok) {
+      setStatus(`✅ Active calls:\n${JSON.stringify(data, null, 2)}`);
+
+      // Extract first call object
+      const callIds = Object.keys(data);
+      if (callIds.length > 0) {
+        const firstCall = data[callIds[0]];
+
+        // ✅ Populate dispositions dropdown
+        if (firstCall.dispositions) {
+          populateDispositions(firstCall.dispositions);
+        }
+
+        // ✅ Auto-store call_id for wrap up call
+        if (firstCall.call_id) {
+          document.getElementById("callId").value = firstCall.call_id;
+        }
+      }
+    } else {
+      setStatus(`❌ Error fetching active calls:\n${JSON.stringify(data, null, 2)}`);
+    }
+  } catch (err) {
+    setStatus(`❌ Error fetching active calls: ${err.message}`);
+  }
+}
+
+
+
+
+/** Accept Call */
+function acceptCall() {
+  postAction({
+    action: "AcceptCall",
+    call_id: document.getElementById("callId").value
+  }).then(r =>
+    setStatus(r.ok ? `✅ Call Accepted:\n${JSON.stringify(r.data, null, 2)}` : `❌ Error:\n${JSON.stringify(r.data, null, 2)}`)
+  );
+}
+
+/** Reject Call */
+function rejectCall() {
+  postAction({
+    action: "RejectCall",
+    call_id: document.getElementById("callId").value
+  }).then(r =>
+    setStatus(r.ok ? `✅ Call Rejected:\n${JSON.stringify(r.data, null, 2)}` : `❌ Error:\n${JSON.stringify(r.data, null, 2)}`)
+  );
+}
+
+const AUTH_URL = "https://auth.convoso.com/oauth/authorize";
+const REDIRECT_URI = "https://rdangalanjr.github.io/outh-redirect-handler/callback.html";
+
+// Open OAuth popup
+document.getElementById("loginBtn").addEventListener("click", () => {
+  const clientId = document.getElementById("clientId").value.trim();
+  if (!clientId) {
+    alert("⚠️ Please enter a Client ID first.");
+    return;
+  }
+
+  const authUrl = `${AUTH_URL}?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=xyz&prompt=login`;
+  window.open(authUrl, "convosoLogin", "width=600,height=700");
+});
+
+
+  // Listen for authorization code
+  window.addEventListener("message", (event) => {
+    if (event.data.type === "convoso_code") {
+      const code = event.data.code;
+      console.log("Received code:", code);
+      document.getElementById("authCode").textContent = code || "-";
+    }
+  });
+
+/** Populate Dispositions */
+function populateDispositions(dispositions) {
+  const select = document.getElementById("dispositionSelect");
+  select.innerHTML = '<option value="">-- Select Disposition --</option>';
+
+  if (Array.isArray(dispositions) && dispositions.length > 0) {
+    dispositions.forEach(d => {
+      const option = document.createElement("option");
+      option.value = d.value;       // API expects this
+      option.textContent = d.name;  // User sees this
+      select.appendChild(option);
+    });
+  } else {
+    console.warn("⚠️ No dispositions available to populate");
+  }
+}
+
+/** Create Channel */
+async function createChannel() {
+  const userId = document.getElementById("userId").value.trim();
+
+
+  const url = `${baseUrl()}/notification/channels`;
+  const body = {
+    topics: [`v1.agent.${userId}`]
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+
+    setStatus(
+      res.ok
+        ? `✅ Notification channel created:\n${JSON.stringify(data, null, 2)}`
+        : `❌ Error creating channel:\n${JSON.stringify(data, null, 2)}`
+    );
+  } catch (err) {
+    setStatus(`❌ Error creating channel: ${err.message}`);
+  }
+}
+
+/**Long Poll**/
+async function longPoll() {
+  const channelId = document.getElementById("channelId")?.value.trim();
+  const fromParam = document.getElementById("pollFrom")?.value.trim();
+  const timeoutParam = document.getElementById("pollTimeout")?.value.trim();
+
+  if (!channelId) {
+    alert("⚠️ Please enter a Channel ID first.");
+    return;
+  }
+
+  const qs = new URLSearchParams();
+  if (fromParam) qs.set("from", fromParam);
+  if (timeoutParam) qs.set("timeout", timeoutParam);
+
+  const url = `${baseUrl()}/notification/channels/${encodeURIComponent(channelId)}${qs.toString() ? `?${qs.toString()}` : ""}`;
+
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: authHeaders()
+    });
+
+    // Some servers return empty body or non-JSON for long poll.
+    const text = await res.text();
+    let payload;
+    try {
+      payload = text ? JSON.parse(text) : null;
+    } catch {
+      payload = text || null;
+    }
+
+    if (res.ok) {
+      setStatus(`✅ Long poll result:\n${payload ? (typeof payload === "string" ? payload : JSON.stringify(payload, null, 2)) : "(no content)"}`);
+    } else {
+      setStatus(`❌ Error long polling:\n${payload ? (typeof payload === "string" ? payload : JSON.stringify(payload, null, 2)) : res.statusText}`);
+    }
+  } catch (err) {
+    setStatus(`❌ Long poll error: ${err.message}`);
+  }
+}
+
+/** Delete Session */
+async function deleteSession() {
+  if (!requireSessionId()) return;
+  const url = `${baseUrl()}/agent/sessions/${sessionId()}`;
+  try {
+    const res = await fetch(url, {
+      method: "DELETE",
+      headers: authHeaders()
+    });
+    const data = await res.json();
+    setStatus(
+      res.ok
+        ? `✅ Session deleted:\n${JSON.stringify(data, null, 2)}`
+        : `❌ Error deleting session:\n${JSON.stringify(data, null, 2)}`
+    );
+
+    if (res.ok) {
+      // clear sessionId field
+      document.getElementById("sessionId").value = "";
+    }
+  } catch (err) {
+    setStatus(`❌ Error deleting session: ${err.message}`);
+  }
+}
+
+
+// This uses the correct endpoint: POST /agent/sessions/{sessionId}/actions
+function makeCall() {
+  // ensure session available
+  if (!requireSessionId()) return;
+
+  const leadId = document.getElementById("leadId").value.trim();
+  const phoneNumber = document.getElementById("phoneNumber").value.trim();
+
+  if (!leadId || !phoneNumber) {
+    alert("⚠️ Please enter both Lead ID and Phone Number.");
+    return;
+  }
+
+  const payload = {
+    action: "MakeCall",
+    lead_id: leadId,
+    phone_number: phoneNumber
+  };
+
+  // reuse your existing postAction helper
+  postAction(payload)
+    .then(r => {
+      if (r.ok) {
+        setStatus(`✅ Call initiated:\n${JSON.stringify(r.data, null, 2)}`);
+        // auto-fill callId if returned
+        if (r.data && (r.data.call_id || r.data.callId)) {
+          document.getElementById("callId").value = r.data.call_id || r.data.callId;
+        }
+      } else {
+        setStatus(`❌ Error making call:\n${JSON.stringify(r.data, null, 2)}`);
+      }
+    })
+    .catch(err => {
+      setStatus(`❌ Error making call: ${err.message}`);
+    });
+}
+
+/** Start Recording */
+function startRecord() {
+  const callId = document.getElementById("callId").value;
+  if (!callId) {
+    alert("⚠️ Please enter or select a Call ID first.");
+    return;
+  }
+
+  postAction({ action: "StartRecordCall", call_id: callId })
+    .then(r =>
+      setStatus(r.ok
+        ? `✅ Recording started:\n${JSON.stringify(r.data, null, 2)}`
+        : `❌ Error starting recording:\n${JSON.stringify(r.data, null, 2)}`)
+    )
+    .catch(err => setStatus(`❌ Error starting recording: ${err.message}`));
+}
+
+/** Stop Recording */
+function stopRecord() {
+  const callId = document.getElementById("callId").value;
+  if (!callId) {
+    alert("⚠️ Please enter or select a Call ID first.`);
+    return;
+  }
+
+  postAction({ action: "StopRecordCall", call_id: callId })
+    .then(r =>
+      setStatus(r.ok
+        ? `✅ Recording stopped:\n${JSON.stringify(r.data, null, 2)}`
+        : `❌ Error stopping recording:\n${JSON.stringify(r.data, null, 2)}`)
+    )
+    .catch(err => setStatus(`❌ Error stopping recording: ${err.message}`));
+}
+
+</script>
+
+</body>
+</html>
