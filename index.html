@@ -104,9 +104,11 @@
     <button style="margin-top:10px;" onclick="openPhoneUrl()">Create Session</button>
 	<div class="row">
     <div>
-      <label>Campaign ID</label>
-      <input type="text" id="campaign" value="1vvoyeamhydq42vr4eykv8yl659tj4pb" />
-    </div>
+	<label>Campaign</label>
+	<select id="campaign" class="full-width">
+    <option value="">-- Select Campaign --</option>
+	</select>
+	</div>
     <div>
       <label>Login Type</label>
       <input type="text" id="loginType" value="campaign" />
@@ -119,6 +121,7 @@
       </div>
     </div>
 	
+
 
 <!-- Second Panel: Session Tools -->
 <div class="panel half-height">
@@ -511,7 +514,10 @@ async function openPhoneUrl() {
       if (data.session_id) {
         document.getElementById("sessionId").value = data.session_id;
       }
-
+      // ✅ Populate Campaigns if available
+      if (data.available_campaigns) {
+      populateCampaigns(data.available_campaigns);
+      }
       // ✅ Extract from availabilities.notready_codes
       if (data.availabilities && data.availabilities.notready_codes) {
         populateNotReadyCodes(data.availabilities.notready_codes);
@@ -534,6 +540,7 @@ async function openPhoneUrl() {
     setStatus(`❌ Error creating session: ${err.message}`);
   }
 }
+
 
 
 
@@ -805,8 +812,23 @@ function stopRecord() {
     .catch(err => setStatus(`❌ Error stopping recording: ${err.message}`));
 }
 
+/** Populate Campaign Dropdown */
+function populateCampaigns(campaigns) {
+  const select = document.getElementById("campaign");
+  select.innerHTML = '<option value="">-- Select Campaign --</option>';
+
+  if (Array.isArray(campaigns) && campaigns.length > 0) {
+    campaigns.forEach(c => {
+      const option = document.createElement("option");
+      option.value = c.value;      // use campaign "value" for API calls
+      option.textContent = c.name; // show campaign "name" to the agent
+      select.appendChild(option);
+    });
+  } else {
+    console.warn("⚠️ No campaigns available to populate");
+  }
+}
+
 </script>
 </body>
 </html>
-
-
