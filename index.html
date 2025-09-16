@@ -97,6 +97,7 @@ pre {
 
 <button id="refreshTokenBtn" style="margin-top:10px;">Refresh Token</button>
 
+
   <h3>Session Login & Availability</h3>
   <label>API Base URL</label>
   <input type="text" id="baseUrl" value="https://api.convoso.com/api/v1" />
@@ -116,8 +117,14 @@ pre {
     <input type="text" id="userId" placeholder="Enter User ID" class="input-inline" />
     <button onclick="createChannel()" class="btn-inline">Create Channel</button>
   </div>
-  
-    <button style="margin-top:10px;" onclick="openPhoneUrl()">Create Session</button>
+      <input type="text" id="channelId" placeholder="Enter Channel ID" class="full-width" />
+
+      <div class="row" style="margin-top:10px;">
+        <input type="text" id="pollFrom" placeholder="from (optional)" class="input-inline" />
+        <input type="text" id="pollTimeout" placeholder="timeout (ms, optional)" class="input-inline" />
+      </div>
+	<button style="margin-top:10px;" onclick="longPoll()">Long Poll</button>
+	<button id="createPhoneBtn" style="margin-top:10px;" onclick="openPhoneUrl()">Create Phone</button>
 	<div class="row">
     <div>
 	<label>Campaign</label>
@@ -136,25 +143,16 @@ pre {
         </select>
       </div>
     </div>
-	
-
 
 <!-- Second Panel: Session Tools -->
 <div class="panel half-height">
       <h3>Session Tools</h3>
       <button style="margin-top:10px;" onclick="getSessionDetails()">Get Session Details</button>
       <button style="margin-top:10px;" onclick="getActiveCalls()">Get Active Calls</button>
-	  <button style="margin-top:10px;background:#ef4444;" onclick="deleteSession()">Delete Session</button>
+	  <button style="margin-top:10px;background:#ef4444;" onclick="deleteSession()">Delete Phone</button>
 
 
-      <label style="margin-top:15px;">Channel ID</label>
-      <input type="text" id="channelId" placeholder="Enter Channel ID" class="full-width" />
 
-      <div class="row" style="margin-top:10px;">
-        <input type="text" id="pollFrom" placeholder="from (optional)" class="input-inline" />
-        <input type="text" id="pollTimeout" placeholder="timeout (ms, optional)" class="input-inline" />
-        <button onclick="longPoll()" class="btn-inline">Long Poll</button>
-      </div>
     </div>
   </div>
 
@@ -513,50 +511,104 @@ function goNotReady(code) {
   }
 }
 
-/** Modified Open Phone URL to extract notready_codes and wrapup availability */
+let currentPhoneId = null; // global to track phone_id
+
+/** Open Phone URL via /agent/phones flow with polling */
 async function openPhoneUrl() {
-  const url = `${baseUrl()}/agent/sessions`;
+  const url = `${baseUrl()}/agent/phones`;
+
+
   try {
+    // Step 1: Create phone
     const res = await fetch(url, {
       method: "POST",
       headers: authHeaders()
     });
     const data = await res.json();
+	const phoneId = data.phone_id;
+	currentPhoneId = phoneId; // ✅ Save phone_id for later use
 
-    console.log("🔍 Full session response:", data);
+    console.log("🔍 /agent/phones response:", data);
 
-    if (res.ok) {
-      // Store session_id
-      if (data.session_id) {
-        document.getElementById("sessionId").value = data.session_id;
-      }
-      // ✅ Populate Campaigns if available
-      if (data.available_campaigns) {
-      populateCampaigns(data.available_campaigns);
-      }
-      // ✅ Extract from availabilities.notready_codes
-      if (data.availabilities && data.availabilities.notready_codes) {
-        populateNotReadyCodes(data.availabilities.notready_codes);
-        populateWrapupAvailability(data.availabilities.notready_codes);
-      } else {
-        console.warn("⚠️ notready_codes not found in availabilities");
-      }
+    if (res.ok && data.phone_id && data.phone_url) {
+      // ✅ Open phone_url in new tab
+      window.open(data.phone_url, "_blank");
+      setStatus(`✅ Phone created. Opened phone_url: ${data.phone_url}`);
 
-      // Open phone_url if available
-      if (data.phone_url) {
-        window.open(data.phone_url, "_blank");
-        setStatus(`✅ Session created. Opened phone_url: ${data.phone_url}`);
-      } else {
-        setStatus(`✅ Session created but no phone_url found:\n${JSON.stringify(data, null, 2)}`);
-      }
+      const phoneId = data.phone_id;
+
+      // Step 2: Poll phone state until REGISTERED
+      let attempts = 0;
+      const maxAttempts = 10; // ~20 seconds max wait
+
+      const pollPhone = async () => {
+        attempts++;
+        try {
+          const phoneRes = await fetch(`${baseUrl()}/agent/phones/${phoneId}`, {
+            method: "GET",
+            headers: authHeaders()
+          });
+          const phoneData = await phoneRes.json();
+          console.log(`🔍 Poll attempt ${attempts}:`, phoneData);
+
+          if (phoneRes.ok && phoneData.state === "REGISTERED" && phoneData.session_id) {
+            // ✅ Phone registered
+            document.getElementById("sessionId").value = phoneData.session_id;
+			
+			// 🎨 Turn Create Phone button green + update text
+			const btn = document.getElementById("createPhoneBtn");
+			if (btn) {
+			  btn.style.backgroundColor = "#28a745"; // green
+			  btn.style.color = "#fff";              // white text
+			  btn.textContent = "Phone Registered ✅";
+			}
+
+            // Step 3: Fetch session details
+            const sessionRes = await fetch(`${baseUrl()}/agent/sessions/${phoneData.session_id}`, {
+              method: "GET",
+              headers: authHeaders()
+            });
+            const sessionData = await sessionRes.json();
+            console.log("🔍 /agent/sessions/{id} response:", sessionData);
+
+            if (sessionRes.ok) {
+              // ✅ Populate Campaigns if available
+              if (sessionData.available_campaigns) {
+                populateCampaigns(sessionData.available_campaigns);
+              }
+
+              // ✅ Extract notready_codes for Availability + Wrap-up
+              if (sessionData.availabilities && sessionData.availabilities.notready_codes) {
+                populateNotReadyCodes(sessionData.availabilities.notready_codes);
+                populateWrapupAvailability(sessionData.availabilities.notready_codes);
+              } else {
+                console.warn("⚠️ notready_codes not found in availabilities");
+              }
+
+              setStatus(`✅ Phone registered & session ready:\n${JSON.stringify(sessionData, null, 2)}`);
+            } else {
+              setStatus(`❌ Error fetching session details:\n${JSON.stringify(sessionData, null, 2)}`);
+            }
+          } else if (attempts < maxAttempts) {
+            // Try again after 2s
+            setStatus(`⏳ Waiting for phone to register (attempt ${attempts}/${maxAttempts})...`);
+            setTimeout(pollPhone, 2000);
+          } else {
+            setStatus("❌ Phone failed to register in time.");
+          }
+        } catch (err) {
+          setStatus(`❌ Error polling phone state: ${err.message}`);
+        }
+      };
+
+      pollPhone(); // start polling
     } else {
-      setStatus(`❌ Session creation failed:\n${JSON.stringify(data, null, 2)}`);
+      setStatus(`❌ Error creating phone:\n${JSON.stringify(data, null, 2)}`);
     }
   } catch (err) {
-    setStatus(`❌ Error creating session: ${err.message}`);
+    setStatus(`❌ Error creating phone: ${err.message}`);
   }
 }
-
 
 
 
@@ -664,8 +716,6 @@ function populateDispositions(dispositions) {
 /** Create Channel */
 async function createChannel() {
   const userId = document.getElementById("userId").value.trim();
-
-
   const url = `${baseUrl()}/notification/channels`;
   const body = {
     topics: [`v1.agent.${userId}`]
@@ -679,15 +729,22 @@ async function createChannel() {
     });
     const data = await res.json();
 
-    setStatus(
-      res.ok
-        ? `✅ Notification channel created:\n${JSON.stringify(data, null, 2)}`
-        : `❌ Error creating channel:\n${JSON.stringify(data, null, 2)}`
-    );
+    if (res.ok && data.channel_id) {
+      // ✅ Auto-populate channelId input
+      const channelInput = document.getElementById("channelId");
+      if (channelInput) {
+        channelInput.value = data.channel_id;
+      }
+
+      setStatus(`✅ Notification channel created: ${data.channel_id}`);
+    } else {
+      setStatus(`❌ Error creating channel:\n${JSON.stringify(data, null, 2)}`);
+    }
   } catch (err) {
     setStatus(`❌ Error creating channel: ${err.message}`);
   }
 }
+
 
 /**Long Poll**/
 async function longPoll() {
@@ -731,28 +788,46 @@ async function longPoll() {
   }
 }
 
-/** Delete Session */
+/** Delete Phone (end session) */
 async function deleteSession() {
-  if (!requireSessionId()) return;
-  const url = `${baseUrl()}/agent/sessions/${sessionId()}`;
+  if (!currentPhoneId) {
+    setStatus("❌ No phone_id found. Please create a phone first.");
+    return;
+  }
+
+  const url = `${baseUrl()}/agent/phones/${currentPhoneId}`;
   try {
     const res = await fetch(url, {
       method: "DELETE",
       headers: authHeaders()
     });
-    const data = await res.json();
-    setStatus(
-      res.ok
-        ? `✅ Session deleted:\n${JSON.stringify(data, null, 2)}`
-        : `❌ Error deleting session:\n${JSON.stringify(data, null, 2)}`
-    );
 
-    if (res.ok) {
-      // clear sessionId field
+    if (res.status === 204) {
+      // ✅ Successfully deleted, no content returned
+      setStatus("✅ Phone deleted successfully (204 No Content).");
       document.getElementById("sessionId").value = "";
+      currentPhoneId = null;
+	  
+	  // 🎨 Reset button style + text
+  const btn = document.getElementById("createPhoneBtn");
+  if (btn) {
+    btn.style.backgroundColor = ""; // reset
+    btn.style.color = "";           // reset
+    btn.textContent = "Create Phone"; // back to default label
+  }
+}
+     else {
+      // Try to parse JSON if server sends an error payload
+      let errorData = {};
+      try {
+        errorData = await res.json();
+      } catch (_) {
+        // ignore parsing error if no body
+      }
+      setStatus(`❌ Error deleting phone:\nStatus ${res.status}\n${JSON.stringify(errorData, null, 2)}`);
     }
   } catch (err) {
-    setStatus(`❌ Error deleting session: ${err.message}`);
+    setStatus(`❌ Error deleting phone: ${err.message}`);
   }
 }
 
@@ -898,4 +973,3 @@ if (data.access_token) {
 </script>
 </body>
 </html>
-
