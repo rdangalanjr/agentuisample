@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Agent Call Control UI</title>
+<title>HyperDrive Agent UI</title>
 <style>
   body { font-family: Arial, sans-serif; background: #f7f9fb; margin: 0; padding: 20px; }
   h2 { margin-top: 0; color: #333; }
@@ -76,14 +76,14 @@ pre {
 </head>
 <body>
 
-<h2>Agent Call Control UI</h2>
+<h2>HyperDrive Agent UI</h2>
 <div class="container">
 
   <!-- Session & Availability -->
 <!-- First Panel: OAuth + Session Login & Availability -->
   <div class="col">
 <div class="panel">
-  <h3>Convoso OAuth Demo</h3>
+  <h3>Convoso OAuth</h3>
   <label>Client ID</label>
    <input type="text" id="clientId" placeholder="Enter Client ID" class="full-width" />
 
@@ -114,14 +114,14 @@ pre {
   </div>
 
   <div class="row">
-    <input type="text" id="userId" placeholder="Enter User ID" class="input-inline" />
+    <input type="text" id="userId" placeholder="Enter User ID" class="input-inline" style="width: 150px;" />
     <button onclick="createChannel()" class="btn-inline">Create Channel</button>
   </div>
       <input type="text" id="channelId" placeholder="Enter Channel ID" class="full-width" />
 
       <div class="row" style="margin-top:10px;">
-        <input type="text" id="pollFrom" placeholder="from (optional)" class="input-inline" />
-        <input type="text" id="pollTimeout" placeholder="timeout (ms, optional)" class="input-inline" />
+        <input type="text" id="pollFrom" placeholder="from (optional)" class="input-inline" style="width: 150px;"/>
+        <input type="text" id="pollTimeout" placeholder="timeout (ms, optional)" class="input-inline" style="width: 150px;"/>
       </div>
 	<button style="margin-top:10px;" onclick="longPoll()">Long Poll</button>
 	<button id="createPhoneBtn" style="margin-top:10px;" onclick="openPhoneUrl()">Create Phone</button>
@@ -134,14 +134,21 @@ pre {
 	</div>
     <div>
       <label>Login Type</label>
-      <input type="text" id="loginType" value="campaign" />
+      <input type="text" id="loginType" value="campaign" style="width: 150px;"/>
     </div>
   </div>
-      <div class="full-width">
-        <select id="notReadyCode" onchange="goNotReady(this.value)">
-          <option value="">-- Select Availability Code --</option>
-        </select>
-      </div>
+<div class="full-width" style="display:flex; align-items:center; gap:10px;">
+  <select id="notReadyCode" onchange="goNotReady(this.value); updateAgentStatusIndicator(this.value)">
+  <option value="">-- Select Availability Code --</option>
+</select>
+
+
+  <!-- Agent Status Indicator -->
+  <span id="agentStatusIndicator" 
+        style="display:inline-block; width:15px; height:15px; border-radius:50%; background-color:brown;"
+        title="Agent Status">
+  </span>
+</div>
     </div>
 
 <!-- Second Panel: Session Tools -->
@@ -150,9 +157,6 @@ pre {
       <button style="margin-top:10px;" onclick="getSessionDetails()">Get Session Details</button>
       <button style="margin-top:10px;" onclick="getActiveCalls()">Get Active Calls</button>
 	  <button style="margin-top:10px;background:#ef4444;" onclick="deleteSession()">Delete Phone</button>
-
-
-
     </div>
   </div>
 
@@ -321,10 +325,31 @@ async function getSessionDetails() {
     const res = await fetch(url, { method: "GET", headers: authHeaders() });
     const data = await res.json();
     setStatus(res.ok ? `✅ Session Details:\n${JSON.stringify(data, null, 2)}` : `❌ Error:\n${JSON.stringify(data, null, 2)}`);
+
+    updateAgentStatusIndicator(data);
+
   } catch (err) {
     setStatus(`❌ Error fetching session details: ${err.message}`);
   }
 }
+
+function updateAgentStatusIndicator(source) {
+  const indicator = document.getElementById("agentStatusIndicator");
+  if (!indicator) return;
+
+  // Handle both sessionData object and raw availability value
+  const availability = typeof source === "object" ? source.availability : parseInt(source, 10);
+
+  if (availability === 2) {
+    indicator.style.backgroundColor = "green";
+    indicator.title = "Agent Ready";
+  } else {
+    indicator.style.backgroundColor = "brown";
+    indicator.title = "Agent Not Ready";
+  }
+}
+
+
 
 /** Get Destinations */
 async function getDestinations() {
