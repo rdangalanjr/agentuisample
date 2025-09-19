@@ -164,12 +164,12 @@ pre {
   <label>Call ID</label>
   <input type="text" id="callId" placeholder="Live call ID" />
 
-  <button onclick="disconnectCall()">Disconnect Call</button>
-
   <div class="btn-row" style="margin-top:10px;">
     <button style="background:#22c55e;" onclick="acceptCall()">Accept Call</button>
     <button style="background:#ef4444;" onclick="rejectCall()">Reject Call</button>
   </div>
+
+    <button onclick="disconnectCall()">Disconnect Call</button>
 
   <label>Disposition</label>
   <select id="dispositionSelect" class="full-width">
@@ -194,12 +194,24 @@ pre {
     <button id="btnResume" onclick="resumeCall()">Resume Call</button>
   </div>
   
-  <h4 style="margin-top:18px;">Manual Call</h4>
-<label>Lead ID</label>
-<input type="text" id="leadId" placeholder="Enter Lead ID" />
+<h4 style="margin-top:18px;">Manual Call</h4>
 
-<label>Phone Number</label>
-<input type="text" id="phoneNumber" placeholder="Enter Phone Number" />
+<!-- Row with Phone Number + Caller ID -->
+<div style="display: flex; gap: 10px; margin-bottom: 10px;">
+  <div style="flex: 1;">
+    <label for="phoneNumber">Phone Number</label>
+    <input type="text" id="phoneNumber" placeholder="Enter Phone Number" style="width: 150px;" />
+  </div>
+  <div style="flex: 1;">
+    <label for="callerId">Caller ID</label>
+    <input type="text" id="callerId" placeholder="Enter Caller ID" style="width: 150px;" />
+  </div>
+</div>
+
+<div>
+  <label for="leadId">Lead ID</label>
+  <input type="text" id="leadId" placeholder="Enter Lead ID" style="width: 150px;" />
+</div>
 
 <button style="margin-top:10px;" onclick="makeCall()">Make Call</button>
 
@@ -839,17 +851,24 @@ function makeCall() {
 
   const leadId = document.getElementById("leadId").value.trim();
   const phoneNumber = document.getElementById("phoneNumber").value.trim();
+  const callerId = document.getElementById("callerId").value.trim(); // new field
 
   if (!leadId || !phoneNumber) {
     alert("⚠️ Please enter both Lead ID and Phone Number.");
     return;
   }
 
+  // Base payload
   const payload = {
     action: "MakeCall",
     lead_id: leadId,
     phone_number: phoneNumber
   };
+
+  // Add caller_id only if provided
+  if (callerId) {
+    payload.caller_id = callerId;
+  }
 
   // reuse your existing postAction helper
   postAction(payload)
@@ -937,8 +956,8 @@ document.getElementById("refreshTokenBtn").addEventListener("click", async () =>
 
   // Cloudflare Worker proxy URL
   const url = "https://damp-scene-59c2.rdangalan.workers.dev"; // replace with your Worker URL
-  
-    // Encode CLIENT_ID:CLIENT_SECRET in Base64
+
+  // Encode CLIENT_ID:CLIENT_SECRET in Base64
   const credentials = btoa(`${clientId}:${clientSecret}`);
 
   const payload = new URLSearchParams({
@@ -958,13 +977,23 @@ document.getElementById("refreshTokenBtn").addEventListener("click", async () =>
     });
 
     const data = await response.json();
+    console.log("🔍 Refresh token response:", data);
 
-if (data.access_token) {
-  document.getElementById("accessToken").value = data.access_token;
-  setStatus("✅ Access token saved to input field.");
-} else {
-  setStatus("❌ Token request failed:\n" + JSON.stringify(data, null, 2));
-}
+    if (response.ok && data.access_token) {
+      // ✅ Populate Access Token field
+      document.getElementById("accessToken").value = data.access_token;
+      setStatus("✅ Access token saved to input field.");
+
+      // 🎨 Turn Refresh Token button green + update text
+      const btn = document.getElementById("refreshTokenBtn");
+      if (btn) {
+        btn.style.backgroundColor = "#28a745"; // green
+        btn.style.color = "#fff";              // white text
+        btn.textContent = "Token Ready ✅";
+      }
+    } else {
+      setStatus("❌ Token request failed:\n" + JSON.stringify(data, null, 2));
+    }
   } catch (err) {
     document.getElementById("tokenResponse").textContent = "❌ Error: " + err.message;
   }
