@@ -71,6 +71,33 @@ pre {
   border: 1px solid #ddd;
 }
 
+  #dialpad {
+    display: grid;
+    grid-template-columns: repeat(3, 70px);
+    gap: 12px;
+    width: max-content;
+    margin-top: 10px;
+  }
+  #dialpad button {
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    border: 1px solid #ccc;
+    background-color: #2000ef;
+    font-size: 22px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  #dialpad button:hover {
+    background-color: #e6e6e6;
+  }
+  #dialpad button:active {
+    background-color: #28a745;
+    color: #fff;
+    transform: scale(0.95);
+  }
+
 
 </style>
 </head>
@@ -260,8 +287,23 @@ pre {
 
     <button onclick="transferCall()">Transfer</button>
 	<button style="margin-top:10px;background:#ef4444;" onclick="leaveConference()">Leave Conference</button>
-  </div>
+  <h4 style="margin-top:18px;">Dialpad</h4>
+<div id="dialpad" style="display:grid; grid-template-columns: repeat(3, 60px); gap:10px; width:max-content;">
+  <button onclick="sendDtmf('1')">1</button>
+  <button onclick="sendDtmf('2')">2</button>
+  <button onclick="sendDtmf('3')">3</button>
+  <button onclick="sendDtmf('4')">4</button>
+  <button onclick="sendDtmf('5')">5</button>
+  <button onclick="sendDtmf('6')">6</button>
+  <button onclick="sendDtmf('7')">7</button>
+  <button onclick="sendDtmf('8')">8</button>
+  <button onclick="sendDtmf('9')">9</button>
+  <button onclick="sendDtmf('*')">*</button>
+  <button onclick="sendDtmf('0')">0</button>
+  <button onclick="sendDtmf('#')">#</button>
+</div>
 
+  </div>
 </div>
 
 <div id="status">ℹ️ Status messages will appear here...</div>
@@ -393,13 +435,32 @@ function populateDestinations(data) {
 }
 
 /** Helper: call actions */
-function postAction(payload) {
-  if (!requireSessionId()) return Promise.resolve({ ok: false, data: { message: "Missing sessionId" } });
+async function postAction(payload) {
   const url = `${baseUrl()}/agent/sessions/${sessionId()}/actions`;
-  return fetch(url, { method: "POST", headers: authHeaders(), body: JSON.stringify(payload) })
-    .then(async res => ({ ok: res.ok, data: await res.json() }))
-    .catch(err => ({ ok: false, data: { message: err.message } }));
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify(payload)
+    });
+
+    let data = null;
+    // ✅ Try parsing JSON only if response has content
+    const text = await res.text();
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.warn("⚠️ Could not parse JSON:", e);
+      }
+    }
+
+    return { ok: res.ok, status: res.status, data };
+  } catch (err) {
+    return { ok: false, status: 0, data: { message: err.message } };
+  }
 }
+
 
 /** Disconnect */
 function disconnectCall() {
@@ -1023,6 +1084,33 @@ document.getElementById("refreshTokenBtn").addEventListener("click", async () =>
     document.getElementById("tokenResponse").textContent = "❌ Error: " + err.message;
   }
 });
+
+async function sendDtmf(digit) {
+  if (!requireSessionId()) return;
+
+  const payload = {
+    action: "PlayDtmf",
+    digit: digit
+  };
+
+  try {
+    const r = await postAction(payload);
+    if (r.ok) {
+      if (r.data) {
+        // ✅ API returned JSON
+        setStatus(`🎵 Sent DTMF: "${digit}"\n${JSON.stringify(r.data, null, 2)}`);
+      } else {
+        // ✅ 204 No Content case
+        setStatus(`🎵 Sent DTMF: "${digit}" (204 No Content)`);
+      }
+
+    } else {
+      setStatus(`❌ Error sending DTMF "${digit}":\n${JSON.stringify(r.data, null, 2)}`);
+    }
+  } catch (err) {
+    setStatus(`❌ Error sending DTMF "${digit}": ${err.message}`);
+  }
+}
 
 </script>
 </body>
