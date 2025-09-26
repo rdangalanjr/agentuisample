@@ -108,37 +108,44 @@ pre {
 
   <!-- Session & Availability -->
 <!-- First Panel: OAuth + Session Login & Availability -->
+ 
   <div class="col">
 <div class="panel">
   <h3>Convoso OAuth</h3>
+  <label for="clusterSelect">Select Cluster</label>
+<select id="clusterSelect" onchange="onClusterChange(this.value)">
+  <option value="">-- Choose Cluster --</option>
+  <option value="3">Cluster 3</option>
+  <option value="4">Cluster 4</option>
+  <option value="5">Cluster 5</option>
+  <option value="6">Cluster 6</option>
+  <option value="10">Cluster 10</option>
+</select>
+
   <label>Client ID</label>
    <input type="text" id="clientId" placeholder="Enter Client ID" class="full-width" />
 
 	<button id="loginBtn">Login with Convoso</button>
-  <hr>
-  
+    
   <label>Client Secret</label>
 <input type="text" id="clientSecret" placeholder="Enter Client Secret" class="full-width" />
 
 <button id="refreshTokenBtn" style="margin-top:10px;">Refresh Token</button>
-
+<hr>
   <h4>Authorization Code</h4>
   <pre id="authCode">-</pre>
+  <div>
+    <label>Access Token</label>
+    <input type="text" id="accessToken" placeholder="Paste token here" />
+  </div>
 
   <h3>Session Login & Availability</h3>
   <label>API Base URL</label>
-  <input type="text" id="baseUrl" value="https://api.convoso.com/api/v1" />
+  <input type="text" id="baseUrl" value="https://api.convoso.com/api/v1" class="full-width"/>
 
-  <div class="row">
-    <div>
-      <label>Access Token</label>
-      <input type="text" id="accessToken" placeholder="Paste token here" />
-    </div>
-    <div>
-      <label>Session ID</label>
-      <input type="text" id="sessionId" placeholder="Enter session ID" />
-    </div>
-  </div>
+  <label>Session ID</label>
+  <input type="text" id="sessionId" placeholder="Enter session ID" class="full-width"/>
+  
 
   <div class="row">
     <input type="text" id="userId" placeholder="Enter User ID" class="input-inline" style="width: 150px;" />
@@ -1111,6 +1118,29 @@ async function sendDtmf(digit) {
     setStatus(`❌ Error sending DTMF "${digit}": ${err.message}`);
   }
 }
+// Mapping of clusters to credentials
+const clusterCredentials = {
+  "3": { clientId: "pgxpitcjgp3rhzm44ypl7ayc08447u6m", clientSecret: "0t18d4hkkb1s0emv21702v3stynqij38" },
+  "4": { clientId: "8xftedzdjo758sd1o79kvziwbydog02f", clientSecret: "n7zsaovk3tg1bktqht03j9plxtz4jraw" },
+  "5": { clientId: "81lmsj4pggeg385h2arthwgglpwzqrvo", clientSecret: "i610gvgn2ktwip3bqkux704jgr9x9uch" },
+  "6": { clientId: "m9ez820zi8v3og5e9tuzr0rubs9b59qi", clientSecret: "9v77oyxwwiqaplep4zemqv6se6ta5ai5" },
+  "10": { clientId: "ukyjpbiou8ij4lyizcg6npghnj41qk0a", clientSecret: "vojaqrpbqxkk99szcyvpd1xrbsjr39ro" }
+};
+
+// Called whenever dropdown changes
+function onClusterChange(cluster) {
+  const creds = clusterCredentials[cluster];
+  if (creds) {
+    document.getElementById("clientId").value = creds.clientId;
+    document.getElementById("clientSecret").value = creds.clientSecret;
+    setStatus(`✅ Loaded credentials for Cluster ${cluster}`);
+  } else {
+    // Clear fields if no selection
+    document.getElementById("clientId").value = "";
+    document.getElementById("clientSecret").value = "";
+  }
+}
+
 
 </script>
 </body>
