@@ -157,7 +157,14 @@ pre {
         <input type="text" id="pollFrom" placeholder="from (optional)" class="input-inline" style="width: 150px;"/>
         <input type="text" id="pollTimeout" placeholder="timeout (ms, optional)" class="input-inline" style="width: 150px;"/>
       </div>
-	<button style="margin-top:10px;" onclick="longPoll()">Long Poll</button>
+	
+  <button style="margin-top:10px;" onclick="longPoll()">Long Poll</button>
+  <div class="btn-row">
+<button id="startLongPollBtn" onclick="startLongPollLoop()">Start Long Poll</button>
+<button id="stopLongPollBtn" onclick="stopLongPollLoop()">Stop Long Poll</button>
+</div>
+
+
 	<button id="createPhoneBtn" style="margin-top:10px;" onclick="openPhoneUrl()">Create Phone</button>
 	<div class="row">
     <div>
@@ -277,13 +284,14 @@ pre {
       <option value="External_Numbers">External_Numbers</option>
       <option value="Ring_Groups">Ring Groups</option>
       <option value="Directory">Directory</option>
+      <option value="custom">Custom</option>
     </select>
 
     <label>Destination Name</label>
     <select id="destinationName"></select>
 
     <label>Destination Value</label>
-    <select id="destinationValue"></select>
+    <input type="text" id="destinationValue">
 
     <label>Transfer Type</label>
     <select id="transferType">
@@ -399,7 +407,6 @@ function updateAgentStatusIndicator(source) {
 }
 
 
-
 /** Get Destinations */
 async function getDestinations() {
   if (!requireSessionId()) return;
@@ -409,9 +416,27 @@ async function getDestinations() {
   try {
     const res = await fetch(url, { method: "GET", headers: authHeaders() });
     const data = await res.json();
+
+    const nameSelect = document.getElementById("destinationName");
+    const valueInput = document.getElementById("destinationValue");
+
     if (res.ok) {
-      populateDestinations(data);
-      setStatus(`✅ Destinations loaded for category "${category}"`);
+      if (category === "custom") {
+        // Hide destinationName dropdown
+        nameSelect.style.display = "none";
+
+        // Clear dropdown + reset value input
+        nameSelect.innerHTML = "";
+        valueInput.value = "";
+
+        setStatus(`✅ Using Custom destination — enter value manually.`);
+      } else {
+        // Show dropdown again if it was hidden
+        nameSelect.style.display = "";
+
+        populateDestinations(data);
+        setStatus(`✅ Destinations loaded for category "${category}"`);
+      }
     } else {
       setStatus(`❌ Error loading destinations:\n${JSON.stringify(data, null, 2)}`);
     }
@@ -422,22 +447,29 @@ async function getDestinations() {
 
 function populateDestinations(data) {
   const nameSelect = document.getElementById("destinationName");
-  const valueSelect = document.getElementById("destinationValue");
-  nameSelect.innerHTML = "";
-  valueSelect.innerHTML = "";
+  const valueInput = document.getElementById("destinationValue"); // now editable text
+  nameSelect.innerHTML = '<option value="">-- Select Destination --</option>';
+  valueInput.value = "";
 
   if (Array.isArray(data)) {
+    // Save mapping for quick lookup
+    const map = {};
     data.forEach(dest => {
-      let nameOption = document.createElement("option");
-      nameOption.value = dest.name || "";
-      nameOption.textContent = dest.name || "";
-      nameSelect.appendChild(nameOption);
+      if (dest.name && dest.value) {
+        let nameOption = document.createElement("option");
+        nameOption.value = dest.value;   // store value in option
+        nameOption.textContent = dest.name;
+        nameSelect.appendChild(nameOption);
 
-      let valueOption = document.createElement("option");
-      valueOption.value = dest.value || "";
-      valueOption.textContent = dest.value || "";
-      valueSelect.appendChild(valueOption);
+        map[dest.name] = dest.value; // map by name for clarity
+      }
     });
+
+    // Attach change handler
+    nameSelect.onchange = () => {
+      const selectedName = nameSelect.options[nameSelect.selectedIndex].text;
+      valueInput.value = map[selectedName] || "";
+    };
   }
 }
 
@@ -512,19 +544,40 @@ async function wrapUpCall() {
   }
 }
 
-
 /** Transfer */
 function transferCall() {
-  postAction({
+  const callId = document.getElementById("callId").value;
+  const transferType = document.getElementById("transferType").value;
+  const destinationCategory = document.getElementById("destinationCategory").value;
+  const destinationNameEl = document.getElementById("destinationName");
+  const destinationValue = document.getElementById("destinationValue").value;
+
+  // Build base payload
+  const payload = {
     action: "TransferCall",
-    call_id: document.getElementById("callId").value,
-    transfer_type: document.getElementById("transferType").value,
-    destination_type: document.getElementById("destinationCategory").value,
-    destination_data: {
-      name: document.getElementById("destinationName").value,
-      value: document.getElementById("destinationValue").value
-    }
-  }).then(r => setStatus(r.ok ? `✅ Transfer Success:\n${JSON.stringify(r.data, null, 2)}` : `❌ Error:\n${JSON.stringify(r.data, null, 2)}`));
+    call_id: callId,
+    transfer_type: transferType,
+    destination_type: destinationCategory
+  };
+
+  // If Custom → destination_data is just a string
+  if (destinationCategory === "custom") {
+    payload.destination_data = destinationValue;
+  } else {
+    payload.destination_data = {
+      name: destinationNameEl.options[destinationNameEl.selectedIndex]?.text || "",
+      value: destinationValue
+    };
+  }
+
+  // Send action
+  postAction(payload).then(r =>
+    setStatus(
+      r.ok
+        ? `✅ Transfer Success:\n${JSON.stringify(r.data, null, 2)}`
+        : `❌ Error:\n${JSON.stringify(r.data, null, 2)}`
+    )
+  );
 }
 
 /** Mute / Unmute */
@@ -852,46 +905,79 @@ async function createChannel() {
 
 
 /**Long Poll**/
-async function longPoll() {
-  const channelId = document.getElementById("channelId")?.value.trim();
-  const fromParam = document.getElementById("pollFrom")?.value.trim();
-  const timeoutParam = document.getElementById("pollTimeout")?.value.trim();
+let longPollIntervalId = null;
 
-  if (!channelId) {
-    alert("⚠️ Please enter a Channel ID first.");
-    return;
-  }
+  async function longPoll() {
+    const channelId = document.getElementById("channelId")?.value.trim();
+    if (!channelId) {
+      alert("⚠️ Please enter a Channel ID first.");
+      return;
+    }
 
-  const qs = new URLSearchParams();
-  if (fromParam) qs.set("from", fromParam);
-  if (timeoutParam) qs.set("timeout", timeoutParam);
-
-  const url = `${baseUrl()}/notification/channels/${encodeURIComponent(channelId)}${qs.toString() ? `?${qs.toString()}` : ""}`;
-
-  try {
-    const res = await fetch(url, {
-      method: "GET",
-      headers: authHeaders()
-    });
-
-    // Some servers return empty body or non-JSON for long poll.
-    const text = await res.text();
-    let payload;
     try {
-      payload = text ? JSON.parse(text) : null;
-    } catch {
-      payload = text || null;
+      const res = await fetch(`${baseUrl()}/notification/channels/${encodeURIComponent(channelId)}`, {
+        method: "GET",
+        headers: authHeaders()
+      });
+
+      const text = await res.text();
+      let payload;
+      try {
+        payload = text ? JSON.parse(text) : null;
+      } catch {
+        payload = text || null;
+      }
+
+      if (res.ok) {
+        setStatus(`✅ Long poll result:\n${payload ? JSON.stringify(payload, null, 2) : "(no content)"}`);
+      } else {
+        setStatus(`❌ Error long polling:\n${res.status} ${res.statusText}`);
+      }
+    } catch (err) {
+      setStatus(`❌ Long poll error: ${err.message}`);
+    }
+  }
+
+  // Start loop every 2 minutes
+  function startLongPollLoop() {
+    if (longPollIntervalId) {
+      setStatus("ℹ️ Long poll loop already running.");
+      return;
     }
 
-    if (res.ok) {
-      setStatus(`✅ Long poll result:\n${payload ? (typeof payload === "string" ? payload : JSON.stringify(payload, null, 2)) : "(no content)"}`);
-    } else {
-      setStatus(`❌ Error long polling:\n${payload ? (typeof payload === "string" ? payload : JSON.stringify(payload, null, 2)) : res.statusText}`);
+    // Run immediately once
+    longPoll();
+
+    // Then every 1 minutes
+    longPollIntervalId = setInterval(longPoll, 60000);
+
+    setStatus("⏳ Long poll loop started (every 1 minutes).");
+
+    // Turn Start button green
+    const startBtn = document.getElementById("startLongPollBtn");
+    if (startBtn) {
+      startBtn.style.backgroundColor = "#28a745";
+      startBtn.style.color = "#fff";
     }
-  } catch (err) {
-    setStatus(`❌ Long poll error: ${err.message}`);
   }
-}
+
+  // Stop loop
+  function stopLongPollLoop() {
+    if (longPollIntervalId) {
+      clearInterval(longPollIntervalId);
+      longPollIntervalId = null;
+      setStatus("🛑 Long poll loop stopped.");
+    } else {
+      setStatus("ℹ️ Long poll loop is not running.");
+    }
+
+    // Reset Start button style
+    const startBtn = document.getElementById("startLongPollBtn");
+    if (startBtn) {
+      startBtn.style.backgroundColor = "";
+      startBtn.style.color = "";
+    }
+  }
 
 /** Delete Phone (end session) */
 async function deleteSession() {
